@@ -4,6 +4,7 @@ import type { MuscleGroup, ExerciseType } from '../../types';
 import { DEFAULT_DUMBBELL_WEIGHTS } from '../../engine/constants';
 import { getTrainingLevel } from '../../types';
 import { db } from '../../db';
+import ProgramEditor from './ProgramEditor';
 
 const MUSCLE_GROUPS: { value: MuscleGroup; label: string }[] = [
   { value: 'back_lats', label: 'Спина (широчайшие)' },
@@ -121,6 +122,9 @@ export default function SettingsScreen() {
           </button>
         )}
       </div>
+
+      {/* Program */}
+      <ProgramEditor />
 
       {/* Vacations */}
       <div className="bg-[var(--color-surface-dim)] rounded-2xl p-4 border border-[var(--color-outline-variant)]/50 mb-3">

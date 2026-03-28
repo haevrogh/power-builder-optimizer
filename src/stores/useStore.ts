@@ -1,7 +1,10 @@
 import { create } from 'zustand';
 import { v4 as uuid } from 'uuid';
 import { db } from '../db';
-import type { UserProfile, ExerciseConfig, Mesocycle, SessionLog, VacationPeriod, PreWorkoutCheckin, SessionPlan } from '../types';
+import type {
+  UserProfile, ExerciseConfig, Mesocycle, SessionLog, VacationPeriod,
+  PreWorkoutCheckin, SessionPlan, TrainingProgram, ExerciseSessionEntry,
+} from '../types';
 import { getTrainingLevel } from '../types';
 import { generateMesocycle } from '../engine/mesocycle';
 import { processSessionResult } from '../engine/autoregulation';
@@ -12,13 +15,18 @@ import { DEFAULT_LANDMARKS, PROGRESSION_COEFFICIENTS } from '../engine/constants
 import { getPullupPhase, adjustLandmarksForBodyweight } from '../engine/progression';
 
 interface ActiveSession {
-  exerciseId: string;
-  mesocycleId: string;
-  weekNumber: number;
-  sessionNumber: number;
+  // Program-based session
+  programId?: string;
+  // Legacy single exercise (fallback)
+  exerciseId?: string;
+  mesocycleId?: string;
+  weekNumber?: number;
+  sessionNumber?: number;
+  // Common
   preCheckinId: string;
   usedAdjustedPlan: boolean;
   adjustedPlan?: SessionPlan;
+  adjustedPlans?: Record<string, SessionPlan>;
   readinessScore: number;
 }
 
@@ -28,10 +36,11 @@ interface AppState {
   mesocycles: Mesocycle[];
   sessionLogs: SessionLog[];
   vacations: VacationPeriod[];
+  programs: TrainingProgram[];
   activeView: 'training' | 'progress' | 'settings';
   isOnboarding: boolean;
   activeTrainingSession: ActiveSession | null;
-  showPreCheckin: { exerciseId: string } | null;
+  showPreCheckin: { programId?: string; exerciseId?: string } | null;
 
   init: () => Promise<void>;
   setActiveView: (view: 'training' | 'progress' | 'settings') => void;
@@ -40,10 +49,19 @@ interface AppState {
   updateExercise: (exercise: ExerciseConfig) => Promise<void>;
   deleteExercise: (id: string) => Promise<void>;
   startMesocycle: (exerciseId: string) => Promise<void>;
-  beginPreCheckin: (exerciseId: string) => void;
-  startTrainingSession: (exerciseId: string, checkin: Omit<PreWorkoutCheckin, 'id' | 'date'>, adjustedPlan: SessionPlan, usedAdjustedPlan: boolean) => Promise<void>;
+
+  // Program management
+  createProgram: (name: string, exerciseIds: string[]) => Promise<void>;
+  deleteProgram: (id: string) => Promise<void>;
+  setActiveProgram: (id: string) => Promise<void>;
+
+  // Training flow
+  beginPreCheckin: (programIdOrExerciseId: string) => void;
+  startTrainingSession: (id: string, checkin: Omit<PreWorkoutCheckin, 'id' | 'date'>, adjustedPlan: SessionPlan, usedAdjustedPlan: boolean) => Promise<void>;
   skipTraining: () => void;
   logSession: (log: Omit<SessionLog, 'id' | 'performanceScore' | 'volumeAdjustment'>) => Promise<{ score: number; decision: string; reason: string }>;
+  logProgramSession: (data: { programId: string; preCheckinId: string; exerciseLogs: ExerciseSessionEntry[] }) => Promise<void>;
+
   addVacation: (vacation: Omit<VacationPeriod, 'id'>) => Promise<void>;
   deleteVacation: (id: string) => Promise<void>;
 }
@@ -54,6 +72,7 @@ export const useStore = create<AppState>((set, get) => ({
   mesocycles: [],
   sessionLogs: [],
   vacations: [],
+  programs: [],
   activeView: 'training',
   isOnboarding: true,
   activeTrainingSession: null,
@@ -65,6 +84,7 @@ export const useStore = create<AppState>((set, get) => ({
     const mesocycles = await db.mesocycles.toArray();
     const sessionLogs = await db.sessionLogs.toArray();
     const vacations = await db.vacations.toArray();
+    const programs = await db.programs.toArray();
 
     set({
       user: users[0] ?? null,
@@ -72,6 +92,7 @@ export const useStore = create<AppState>((set, get) => ({
       mesocycles,
       sessionLogs,
       vacations,
+      programs,
       isOnboarding: !users[0],
     });
 
@@ -125,6 +146,7 @@ export const useStore = create<AppState>((set, get) => ({
     await db.exercises.put(exercise);
     set(s => ({ exercises: [...s.exercises, exercise] }));
 
+    // Generate mesocycle for the exercise
     const meso = generateMesocycle(exercise, user.trainingAgeMonths, user.sessionsPerWeek);
     await db.mesocycles.put(meso);
     set(s => ({ mesocycles: [...s.mesocycles, meso] }));
@@ -150,17 +172,74 @@ export const useStore = create<AppState>((set, get) => ({
     set(s => ({ mesocycles: [...s.mesocycles, meso] }));
   },
 
-  // Step 1: Show pre-workout checkin
-  beginPreCheckin: (exerciseId) => {
-    set({ showPreCheckin: { exerciseId } });
+  // ─── Program management ───
+
+  createProgram: async (name, exerciseIds) => {
+    const user = get().user;
+    if (!user) return;
+
+    const prog: TrainingProgram = {
+      id: uuid(),
+      name,
+      exerciseIds,
+      sessionsPerWeek: user.sessionsPerWeek,
+      isActive: true,
+      createdAt: new Date().toISOString(),
+    };
+
+    // Deactivate other programs
+    const oldProgs = get().programs.filter(p => p.isActive);
+    for (const p of oldProgs) {
+      const updated = { ...p, isActive: false };
+      await db.programs.put(updated);
+    }
+
+    await db.programs.put(prog);
+
+    // Ensure all exercises in program have active mesocycles
+    for (const exId of exerciseIds) {
+      const hasMeso = get().mesocycles.some(m => m.exerciseId === exId && m.status === 'active');
+      if (!hasMeso) {
+        const ex = get().exercises.find(e => e.id === exId);
+        if (ex) {
+          const meso = generateMesocycle(ex, user.trainingAgeMonths, user.sessionsPerWeek);
+          await db.mesocycles.put(meso);
+          set(s => ({ mesocycles: [...s.mesocycles, meso] }));
+        }
+      }
+    }
+
+    set(s => ({
+      programs: [...s.programs.map(p => ({ ...p, isActive: false })), prog],
+    }));
   },
 
-  // Step 2: After checkin, start actual session with adjusted plan
-  startTrainingSession: async (exerciseId, checkinData, adjustedPlan, usedAdjustedPlan) => {
-    const meso = get().mesocycles.find(m => m.exerciseId === exerciseId && m.status === 'active');
-    if (!meso) return;
+  deleteProgram: async (id) => {
+    await db.programs.delete(id);
+    set(s => ({ programs: s.programs.filter(p => p.id !== id) }));
+  },
 
-    // Save checkin to DB
+  setActiveProgram: async (id) => {
+    const progs = get().programs;
+    for (const p of progs) {
+      const updated = { ...p, isActive: p.id === id };
+      await db.programs.put(updated);
+    }
+    set(s => ({ programs: s.programs.map(p => ({ ...p, isActive: p.id === id })) }));
+  },
+
+  // ─── Training flow ───
+
+  beginPreCheckin: (id) => {
+    const prog = get().programs.find(p => p.id === id);
+    if (prog) {
+      set({ showPreCheckin: { programId: id } });
+    } else {
+      set({ showPreCheckin: { exerciseId: id } });
+    }
+  },
+
+  startTrainingSession: async (id, checkinData, adjustedPlan, usedAdjustedPlan) => {
     const checkin: PreWorkoutCheckin = {
       ...checkinData,
       id: uuid(),
@@ -168,25 +247,132 @@ export const useStore = create<AppState>((set, get) => ({
     };
     await db.precheckins.put(checkin);
 
-    set({
-      showPreCheckin: null,
-      activeTrainingSession: {
-        exerciseId,
-        mesocycleId: meso.id,
-        weekNumber: meso.currentWeek,
-        sessionNumber: meso.currentSession,
-        preCheckinId: checkin.id,
-        usedAdjustedPlan,
-        adjustedPlan,
-        readinessScore: checkinData.readinessScore,
-      },
-    });
+    const prog = get().programs.find(p => p.id === id);
+    if (prog) {
+      // Program-based session
+      set({
+        showPreCheckin: null,
+        activeTrainingSession: {
+          programId: prog.id,
+          preCheckinId: checkin.id,
+          usedAdjustedPlan,
+          adjustedPlan,
+          readinessScore: checkinData.readinessScore,
+        },
+      });
+    } else {
+      // Single exercise session (legacy)
+      const meso = get().mesocycles.find(m => m.exerciseId === id && m.status === 'active');
+      if (!meso) return;
+      set({
+        showPreCheckin: null,
+        activeTrainingSession: {
+          exerciseId: id,
+          mesocycleId: meso.id,
+          weekNumber: meso.currentWeek,
+          sessionNumber: meso.currentSession,
+          preCheckinId: checkin.id,
+          usedAdjustedPlan,
+          adjustedPlan,
+          readinessScore: checkinData.readinessScore,
+        },
+      });
+    }
   },
 
   skipTraining: () => {
     set({ showPreCheckin: null, activeTrainingSession: null });
   },
 
+  // Log a program session (all exercises at once)
+  logProgramSession: async (data) => {
+    const user = get().user;
+    if (!user) return;
+
+    for (const entry of data.exerciseLogs) {
+      const exercise = get().exercises.find(e => e.id === entry.exerciseId);
+      const meso = get().mesocycles.find(m => m.id === entry.mesocycleId);
+      if (!exercise || !meso) continue;
+
+      const week = meso.weeks.find(w => w.weekNumber === meso.currentWeek);
+      const plan = week?.sessions.find(s => s.sessionNumber === meso.currentSession);
+      if (!plan) continue;
+
+      // Process autoregulation
+      const mockLog = {
+        id: '', date: new Date().toISOString(), exerciseId: entry.exerciseId,
+        mesocycleId: entry.mesocycleId, weekNumber: meso.currentWeek,
+        sessionNumber: meso.currentSession, preCheckinId: data.preCheckinId,
+        sets: entry.sets, performanceScore: entry.performanceScore,
+        usedAdjustedPlan: true,
+      } as SessionLog;
+
+      const { updatedExercise, updatedMesocycle } = processSessionResult(
+        mockLog, plan, exercise, meso, user.trainingAgeMonths,
+      );
+
+      // Evaluate pullup phase
+      if (updatedExercise.type === 'bodyweight') {
+        const allLogs = get().sessionLogs.filter(l => l.exerciseId === entry.exerciseId);
+        const newPhase = evaluatePullupPhase(updatedExercise, [...allLogs, mockLog]);
+        if (newPhase !== updatedExercise.progressionPhase) {
+          updatedExercise.progressionPhase = newPhase;
+        }
+      }
+
+      // Save session log
+      const sessionLog: SessionLog = {
+        ...mockLog,
+        id: uuid(),
+        volumeAdjustment: { setsChange: 0, rpeChange: 0, decision: entry.decision, reason: entry.reason },
+      };
+
+      // Advance counters
+      let newWeek = meso.currentWeek;
+      let newSession = meso.currentSession + 1;
+      const maxSessions = week?.sessions.length ?? 2;
+      if (newSession > maxSessions) {
+        newSession = 1;
+        newWeek += 1;
+      }
+      const finalMeso: Mesocycle = {
+        ...updatedMesocycle,
+        currentWeek: newWeek,
+        currentSession: newSession,
+        status: newWeek > meso.durationWeeks ? 'completed' : updatedMesocycle.status,
+      };
+
+      await Promise.all([
+        db.sessionLogs.put(sessionLog),
+        db.exercises.put(updatedExercise),
+        db.mesocycles.put(finalMeso),
+      ]);
+
+      set(s => ({
+        sessionLogs: [...s.sessionLogs, sessionLog],
+        exercises: s.exercises.map(e => e.id === updatedExercise.id ? updatedExercise : e),
+        mesocycles: s.mesocycles.map(m => m.id === finalMeso.id ? finalMeso : m),
+      }));
+
+      // If mesocycle completed, recalibrate and generate next
+      if (finalMeso.status === 'completed') {
+        const allLogs = get().sessionLogs.filter(l => l.exerciseId === updatedExercise.id);
+        const newLandmarks = recalibrateVolumeLandmarks(updatedExercise.volumeLandmarks, allLogs);
+        if (newLandmarks !== updatedExercise.volumeLandmarks) {
+          const recal = { ...updatedExercise, volumeLandmarks: newLandmarks };
+          await db.exercises.put(recal);
+          set(s => ({ exercises: s.exercises.map(e => e.id === recal.id ? recal : e) }));
+        }
+        const nextMeso = generateMesocycle(updatedExercise, user.trainingAgeMonths, user.sessionsPerWeek);
+        await db.mesocycles.put(nextMeso);
+        set(s => ({ mesocycles: [...s.mesocycles, nextMeso] }));
+      }
+    }
+
+    set({ activeTrainingSession: null });
+  },
+
+  // Legacy single-exercise log (kept for backward compat)
   logSession: async (logData) => {
     const user = get().user;
     if (!user) return { score: 0, decision: 'hold', reason: '' };
@@ -199,21 +385,15 @@ export const useStore = create<AppState>((set, get) => ({
     const plan = week?.sessions.find(s => s.sessionNumber === logData.sessionNumber);
     if (!plan) return { score: 0, decision: 'hold', reason: '' };
 
-    // Use adjusted plan from active session if available
     const activeSession = get().activeTrainingSession;
     const effectivePlan = activeSession?.adjustedPlan ?? plan;
     const readinessScore = activeSession?.readinessScore ?? 0;
     const usedAdj = logData.usedAdjustedPlan ?? true;
 
-    // Calculate performance score with new formula
     const perfScore = calculatePerformanceScore(
-      { ...logData, id: '' } as SessionLog,
-      effectivePlan,
-      readinessScore,
-      usedAdj,
+      { ...logData, id: '' } as SessionLog, effectivePlan, readinessScore, usedAdj,
     );
 
-    // Get decision from score, check joint pain from checkin
     let jointPain = false;
     if (logData.preCheckinId) {
       const checkin = await db.precheckins.get(logData.preCheckinId);
@@ -222,16 +402,11 @@ export const useStore = create<AppState>((set, get) => ({
 
     const decision = getDecisionFromScore(perfScore, jointPain);
 
-    // Process autoregulation for future weeks
     const { updatedExercise, updatedMesocycle, adjustment } = processSessionResult(
       { ...logData, id: '', performanceScore: perfScore } as SessionLog,
-      plan,
-      exercise,
-      meso,
-      user.trainingAgeMonths,
+      plan, exercise, meso, user.trainingAgeMonths,
     );
 
-    // Evaluate pullup phase transition
     if (updatedExercise.type === 'bodyweight') {
       const allLogs = [...get().sessionLogs, { ...logData, id: '', performanceScore: perfScore, volumeAdjustment: adjustment } as SessionLog];
       const newPhase = evaluatePullupPhase(updatedExercise, allLogs);
@@ -241,24 +416,16 @@ export const useStore = create<AppState>((set, get) => ({
     }
 
     const sessionLog: SessionLog = {
-      ...logData,
-      id: uuid(),
-      performanceScore: perfScore,
+      ...logData, id: uuid(), performanceScore: perfScore,
       volumeAdjustment: { ...adjustment, decision: decision.decision, reason: decision.reason },
     };
 
-    // Advance session/week counters
     let newWeek = meso.currentWeek;
     let newSession = meso.currentSession + 1;
     const maxSessions = week?.sessions.length ?? 2;
-    if (newSession > maxSessions) {
-      newSession = 1;
-      newWeek += 1;
-    }
+    if (newSession > maxSessions) { newSession = 1; newWeek += 1; }
     const finalMeso: Mesocycle = {
-      ...updatedMesocycle,
-      currentWeek: newWeek,
-      currentSession: newSession,
+      ...updatedMesocycle, currentWeek: newWeek, currentSession: newSession,
       status: newWeek > meso.durationWeeks ? 'completed' : updatedMesocycle.status,
     };
 
@@ -279,11 +446,10 @@ export const useStore = create<AppState>((set, get) => ({
       const allLogs = get().sessionLogs.filter(l => l.exerciseId === updatedExercise.id);
       const newLandmarks = recalibrateVolumeLandmarks(updatedExercise.volumeLandmarks, allLogs);
       if (newLandmarks !== updatedExercise.volumeLandmarks) {
-        const recalibratedExercise = { ...updatedExercise, volumeLandmarks: newLandmarks };
-        await db.exercises.put(recalibratedExercise);
-        set(s => ({ exercises: s.exercises.map(e => e.id === recalibratedExercise.id ? recalibratedExercise : e) }));
+        const recal = { ...updatedExercise, volumeLandmarks: newLandmarks };
+        await db.exercises.put(recal);
+        set(s => ({ exercises: s.exercises.map(e => e.id === recal.id ? recal : e) }));
       }
-
       const nextMeso = generateMesocycle(updatedExercise, user.trainingAgeMonths, user.sessionsPerWeek);
       await db.mesocycles.put(nextMeso);
       set(s => ({ mesocycles: [...s.mesocycles, nextMeso] }));

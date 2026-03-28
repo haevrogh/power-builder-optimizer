@@ -12,6 +12,8 @@ function useSessionData() {
   const mesocycles = useStore(s => s.mesocycles);
 
   if (!activeTrainingSession) return null;
+  if (!activeTrainingSession.exerciseId || !activeTrainingSession.mesocycleId) return null;
+  if (!activeTrainingSession.weekNumber || !activeTrainingSession.sessionNumber) return null;
 
   const exercise = exercises.find(e => e.id === activeTrainingSession.exerciseId);
   const meso = mesocycles.find(m => m.id === activeTrainingSession.mesocycleId);
@@ -21,7 +23,7 @@ function useSessionData() {
   const plan = week?.sessions.find(s => s.sessionNumber === activeTrainingSession.sessionNumber);
   if (!plan) return null;
 
-  return { session: activeTrainingSession, exercise, meso, week, plan };
+  return { session: activeTrainingSession as typeof activeTrainingSession & { exerciseId: string; mesocycleId: string; weekNumber: number; sessionNumber: number }, exercise, meso, week, plan };
 }
 
 export default function ActiveSession() {

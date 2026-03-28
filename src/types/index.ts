@@ -152,6 +152,36 @@ export interface WeeklySnapshot {
   weekInMesocycle: number;
 }
 
+export interface TrainingProgram {
+  id: string;
+  name: string;
+  exerciseIds: string[];          // ordered list
+  sessionsPerWeek: number;
+  isActive: boolean;
+  createdAt: string;
+}
+
+// A full session log covering all exercises in a program session
+export interface ProgramSessionLog {
+  id: string;
+  programId: string;
+  date: string;
+  preCheckinId: string;
+  weekNumber: number;
+  sessionNumber: number;
+  sessionType: SessionType;
+  exerciseLogs: ExerciseSessionEntry[];
+}
+
+export interface ExerciseSessionEntry {
+  exerciseId: string;
+  mesocycleId: string;
+  sets: SetLog[];
+  performanceScore: number;
+  decision: VolumeDecision;
+  reason: string;
+}
+
 export function getTrainingLevel(months: number): TrainingLevel {
   if (months < 6) return 'absolute_beginner';
   if (months < 18) return 'beginner';
