@@ -218,10 +218,17 @@ export default function SettingsScreen() {
 }
 
 function ProfileField({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+  const [draft, setDraft] = useState(String(value));
+  const [focused, setFocused] = useState(false);
+
   return (
     <div className="flex items-center justify-between">
       <span className="text-sm text-[var(--color-on-surface-variant)]">{label}</span>
-      <input type="number" value={value} onChange={e => onChange(parseInt(e.target.value) || 0)}
+      <input type="number" inputMode="numeric"
+        value={focused ? draft : String(value)}
+        onFocus={() => { setFocused(true); setDraft(String(value)); }}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={() => { setFocused(false); onChange(parseInt(draft) || 0); }}
         className="w-24 h-10 px-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-outline-variant)] text-sm font-[family-name:var(--font-data)] text-right outline-none" />
     </div>
   );

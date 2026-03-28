@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useStore } from '../../stores/useStore';
 
 export default function ProfileSetup({ onNext }: { onNext: () => void }) {
@@ -78,14 +78,31 @@ export default function ProfileSetup({ onNext }: { onNext: () => void }) {
 }
 
 function Field({ label, value, onChange, min, max }: { label: string; value: number; onChange: (v: number) => void; min: number; max: number }) {
+  const [draft, setDraft] = useState(String(value));
+  const [focused, setFocused] = useState(false);
+
+  // Sync draft when value changes externally (and field is not focused)
+  useEffect(() => {
+    if (!focused) setDraft(String(value));
+  }, [value, focused]);
+
   return (
     <div>
       <label className="text-sm font-medium text-[var(--color-on-surface-variant)] mb-1 block">{label}</label>
       <input
         type="number"
-        value={value}
+        inputMode="numeric"
+        value={focused ? draft : String(value)}
+        onFocus={() => {
+          setFocused(true);
+          setDraft(String(value));
+        }}
         onChange={e => {
-          const v = parseInt(e.target.value) || 0;
+          setDraft(e.target.value);
+        }}
+        onBlur={() => {
+          setFocused(false);
+          const v = parseInt(draft) || min;
           onChange(Math.max(min, Math.min(max, v)));
         }}
         className="w-full h-12 px-4 rounded-xl bg-[var(--color-surface-dim)] border border-[var(--color-outline-variant)] text-base font-[family-name:var(--font-data)] outline-none focus:border-[var(--color-primary)] transition-colors"
