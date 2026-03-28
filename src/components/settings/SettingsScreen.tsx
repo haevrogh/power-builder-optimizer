@@ -3,6 +3,7 @@ import { useStore } from '../../stores/useStore';
 import type { MuscleGroup, ExerciseType } from '../../types';
 import { DEFAULT_DUMBBELL_WEIGHTS } from '../../engine/constants';
 import { getTrainingLevel } from '../../types';
+import { db } from '../../db';
 
 const MUSCLE_GROUPS: { value: MuscleGroup; label: string }[] = [
   { value: 'back_lats', label: 'Спина (широчайшие)' },
@@ -107,7 +108,9 @@ export default function SettingsScreen() {
                 {e.type === 'bodyweight' ? 'Свой вес' : 'Гантели'} · {MUSCLE_GROUPS.find(g => g.value === e.muscleGroup)?.label}
               </div>
             </div>
-            <button onClick={() => deleteExercise(e.id)} className="text-xs text-[var(--color-danger)]">Удалить</button>
+            <button onClick={() => {
+              if (confirm(`Удалить "${e.name}"? Это действие нельзя отменить.`)) deleteExercise(e.id);
+            }} className="text-xs text-[var(--color-danger)]">Удалить</button>
           </div>
         ))}
         {showAddExercise ? (
@@ -186,6 +189,25 @@ export default function SettingsScreen() {
           </button>
         )}
       </div>
+
+      {/* Import */}
+      <label className="w-full h-12 border border-[var(--color-outline)] rounded-2xl text-sm font-medium text-[var(--color-primary)] mb-3 flex items-center justify-center cursor-pointer">
+        Импортировать данные (JSON)
+        <input type="file" accept=".json" className="hidden" onChange={async (e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          try {
+            const text = await file.text();
+            const data = JSON.parse(text);
+            if (data.user) await db.users.put(data.user);
+            if (data.exercises) for (const ex of data.exercises) await db.exercises.put(ex);
+            if (data.mesocycles) for (const m of data.mesocycles) await db.mesocycles.put(m);
+            if (data.sessionLogs) for (const l of data.sessionLogs) await db.sessionLogs.put(l);
+            if (data.vacations) for (const v of data.vacations) await db.vacations.put(v);
+            window.location.reload();
+          } catch { alert('Ошибка чтения файла'); }
+        }} />
+      </label>
 
       {/* Export */}
       <button onClick={handleExport} className="w-full h-12 border border-[var(--color-outline)] rounded-2xl text-sm font-medium text-[var(--color-primary)] mb-3">

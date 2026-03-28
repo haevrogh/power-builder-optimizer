@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <rect width="192" height="192" rx="40" fill="#FFFFFF"/>
+  <circle cx="96" cy="96" r="70" fill="none" stroke="#007AFF" stroke-width="10" stroke-linecap="round" stroke-dasharray="330 440"/>
+  <circle cx="96" cy="96" r="50" fill="none" stroke="#34C759" stroke-width="8" stroke-linecap="round" stroke-dasharray="230 314"/>
+  <text x="96" y="108" text-anchor="middle" font-family="sans-serif" font-weight="bold" font-size="40" fill="#1C1C1E">VO</text>
+</svg>

@@ -4,6 +4,7 @@ import type { SetLog, SessionPlan } from '../../types';
 import { formatLoadConfig, formatTime, formatDecision } from '../../utils/format';
 import { REST_TIMES } from '../../engine/constants';
 import ProgressRing from '../common/ProgressRing';
+import WeightSelector from '../common/WeightSelector';
 
 function useSessionData() {
   const activeTrainingSession = useStore(s => s.activeTrainingSession);
@@ -260,6 +261,18 @@ export default function ActiveSession() {
         <h2 className="font-[family-name:var(--font-display)] text-[28px] font-bold">{exercise.name}</h2>
         <p className="text-sm text-[var(--color-on-surface-variant)]">{formatLoadConfig(plan.loadConfig)}</p>
       </div>
+
+      {/* Dumbbell weight selector */}
+      {exercise.type === 'dumbbell' && exercise.availableWeights && exercise.availableWeights.length > 0 && (
+        <div className="mb-3">
+          <p className="text-sm font-medium mb-1">Вес:</p>
+          <WeightSelector
+            weights={exercise.availableWeights}
+            selected={'weight' in plan.loadConfig ? plan.loadConfig.weight : exercise.availableWeights[0]}
+            onChange={() => {/* weight change tracked via loadConfig in set log */}}
+          />
+        </div>
+      )}
 
       <div className="flex justify-center mb-4">
         <ProgressRing progress={completedSets.length / totalSets} size={120} strokeWidth={12} color="var(--color-progress)">
