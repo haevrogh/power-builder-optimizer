@@ -101,15 +101,29 @@ export interface SessionLog {
   mesocycleId: string;
   weekNumber: number;
   sessionNumber: number;
+  preCheckinId: string;
   sets: SetLog[];
-  overallRPE: number;
-  pumpQuality: 1 | 2 | 3;
+  performanceScore?: number;
+  volumeAdjustment?: VolumeAdjustment;
+  usedAdjustedPlan: boolean;
+}
+
+export interface PreWorkoutCheckin {
+  id: string;
+  date: string;
   sorenessFromPrevious: 0 | 1 | 2 | 3;
   jointPain: boolean;
   jointPainLocation?: string;
   sleepQuality: 1 | 2 | 3;
-  performanceScore?: number;
-  volumeAdjustment?: VolumeAdjustment;
+  readinessScore: number;
+  planAdjustment: PlanAdjustment | null;
+}
+
+export interface PlanAdjustment {
+  intensityChange: number;
+  setsChange: number;
+  message: string;
+  severity: 'none' | 'mild' | 'moderate' | 'severe';
 }
 
 export interface VolumeAdjustment {

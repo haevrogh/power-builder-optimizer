@@ -4,6 +4,7 @@ import ProfileSetup from './components/onboarding/ProfileSetup';
 import ExerciseSetup from './components/onboarding/ExerciseSetup';
 import SessionView from './components/training/SessionView';
 import ActiveSession from './components/training/ActiveSession';
+import PreCheckin from './components/training/PreCheckin';
 import ProgressScreen from './components/progress/ProgressScreen';
 import SettingsScreen from './components/settings/SettingsScreen';
 import BottomNav from './components/common/BottomNav';
@@ -13,8 +14,12 @@ export default function App() {
   const isOnboarding = useStore(s => s.isOnboarding);
   const user = useStore(s => s.user);
   const exercises = useStore(s => s.exercises);
+  const mesocycles = useStore(s => s.mesocycles);
   const activeView = useStore(s => s.activeView);
   const activeTrainingSession = useStore(s => s.activeTrainingSession);
+  const showPreCheckin = useStore(s => s.showPreCheckin);
+  const startTrainingSession = useStore(s => s.startTrainingSession);
+  const skipTraining = useStore(s => s.skipTraining);
   const [onboardingStep, setOnboardingStep] = useState<'profile' | 'exercises'>('profile');
   const [ready, setReady] = useState(false);
 
@@ -40,6 +45,29 @@ export default function App() {
     return <ExerciseSetup onDone={() => setOnboardingStep('profile')} />;
   }
 
+  // Pre-workout checkin screen
+  if (showPreCheckin) {
+    const exercise = exercises.find(e => e.id === showPreCheckin.exerciseId);
+    const meso = mesocycles.find(m => m.exerciseId === showPreCheckin.exerciseId && m.status === 'active');
+    if (exercise && meso) {
+      const week = meso.weeks[meso.currentWeek - 1];
+      const plan = week?.sessions.find(s => s.sessionNumber === meso.currentSession);
+      if (plan) {
+        return (
+          <PreCheckin
+            plan={plan}
+            exerciseName={exercise.name}
+            onStart={(checkin, adjustedPlan, usedAdjustedPlan) => {
+              startTrainingSession(exercise.id, checkin, adjustedPlan, usedAdjustedPlan);
+            }}
+            onSkip={skipTraining}
+          />
+        );
+      }
+    }
+  }
+
+  // Active training session
   if (activeTrainingSession && activeTrainingSession.exerciseId) {
     return <ActiveSession />;
   }

@@ -141,7 +141,7 @@ export default function ProgressScreen() {
                     <div>
                       <span className="text-sm">{new Date(log.date).toLocaleDateString('ru-RU')}</span>
                       <span className="text-xs text-[var(--color-on-surface-variant)] ml-2">
-                        {log.sets.length} подх · RPE {log.overallRPE}
+                        {log.sets.length} подх{log.sets.length > 0 ? ` · RPE ${(log.sets.reduce((s, c) => s + c.rpe, 0) / log.sets.length).toFixed(1)}` : ''}
                       </span>
                     </div>
                     {log.volumeAdjustment && (

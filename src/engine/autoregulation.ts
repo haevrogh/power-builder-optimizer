@@ -1,21 +1,25 @@
 import type { SessionLog, SessionPlan, ExerciseConfig, Mesocycle, VolumeAdjustment } from '../types';
 import { getTrainingLevel } from '../types';
-import { calculatePerformanceScore, getDecisionFromScore } from './scoring';
+import { getDecisionFromScore } from './scoring';
 import { MAX_PROGRESSION } from './constants';
 
+/**
+ * Process session result and update exercise/mesocycle.
+ * Score is now pre-calculated and passed in via log.performanceScore.
+ * Joint pain is handled via pre-checkin, not in session log.
+ */
 export function processSessionResult(
   log: SessionLog,
-  plan: SessionPlan,
+  _plan: SessionPlan,
   exercise: ExerciseConfig,
   mesocycle: Mesocycle,
   trainingAgeMonths: number,
 ): { updatedExercise: ExerciseConfig; updatedMesocycle: Mesocycle; adjustment: VolumeAdjustment } {
-  const score = calculatePerformanceScore(log, plan);
-  const decision = getDecisionFromScore(score, log.jointPain);
+  const score = log.performanceScore ?? 0;
+  const decision = getDecisionFromScore(score, false); // jointPain handled at store level
   const level = getTrainingLevel(trainingAgeMonths);
   const maxCoeff = MAX_PROGRESSION[level];
 
-  // Update progression coefficient
   let newCoeff = exercise.progressionCoefficient;
   if (decision.coefficientChange === -999) {
     newCoeff = 0;
@@ -23,7 +27,6 @@ export function processSessionResult(
     newCoeff = Math.max(0, Math.min(maxCoeff, newCoeff + decision.coefficientChange));
   }
 
-  // Update repMax weekly
   const newRepMax = decision.decision === 'deload' || decision.decision === 'stop'
     ? exercise.repMax
     : Math.round((exercise.repMax * (1 + newCoeff)) * 100) / 100;
@@ -35,7 +38,6 @@ export function processSessionResult(
     repMaxLastUpdated: new Date(),
   };
 
-  // Adjust future weeks in mesocycle
   const updatedWeeks = mesocycle.weeks.map(week => {
     if (week.weekNumber <= mesocycle.currentWeek) return week;
 

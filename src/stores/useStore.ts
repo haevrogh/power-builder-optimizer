@@ -1,14 +1,26 @@
 import { create } from 'zustand';
 import { v4 as uuid } from 'uuid';
 import { db } from '../db';
-import type { UserProfile, ExerciseConfig, Mesocycle, SessionLog, VacationPeriod } from '../types';
+import type { UserProfile, ExerciseConfig, Mesocycle, SessionLog, VacationPeriod, PreWorkoutCheckin, SessionPlan } from '../types';
 import { getTrainingLevel } from '../types';
 import { generateMesocycle } from '../engine/mesocycle';
 import { processSessionResult } from '../engine/autoregulation';
 import { evaluatePullupPhase, recalibrateVolumeLandmarks } from '../engine/calibration';
 import { handleMissedSessions } from '../engine/vacation';
+import { calculatePerformanceScore, getDecisionFromScore } from '../engine/scoring';
 import { DEFAULT_LANDMARKS, PROGRESSION_COEFFICIENTS } from '../engine/constants';
 import { getPullupPhase, adjustLandmarksForBodyweight } from '../engine/progression';
+
+interface ActiveSession {
+  exerciseId: string;
+  mesocycleId: string;
+  weekNumber: number;
+  sessionNumber: number;
+  preCheckinId: string;
+  usedAdjustedPlan: boolean;
+  adjustedPlan?: SessionPlan;
+  readinessScore: number;
+}
 
 interface AppState {
   user: UserProfile | null;
@@ -18,9 +30,9 @@ interface AppState {
   vacations: VacationPeriod[];
   activeView: 'training' | 'progress' | 'settings';
   isOnboarding: boolean;
-  activeTrainingSession: { exerciseId: string; mesocycleId: string; weekNumber: number; sessionNumber: number } | null;
+  activeTrainingSession: ActiveSession | null;
+  showPreCheckin: { exerciseId: string } | null;
 
-  // Actions
   init: () => Promise<void>;
   setActiveView: (view: 'training' | 'progress' | 'settings') => void;
   saveUser: (profile: Omit<UserProfile, 'id' | 'createdAt'>) => Promise<void>;
@@ -28,7 +40,9 @@ interface AppState {
   updateExercise: (exercise: ExerciseConfig) => Promise<void>;
   deleteExercise: (id: string) => Promise<void>;
   startMesocycle: (exerciseId: string) => Promise<void>;
-  startTrainingSession: (exerciseId: string) => void;
+  beginPreCheckin: (exerciseId: string) => void;
+  startTrainingSession: (exerciseId: string, checkin: Omit<PreWorkoutCheckin, 'id' | 'date'>, adjustedPlan: SessionPlan, usedAdjustedPlan: boolean) => Promise<void>;
+  skipTraining: () => void;
   logSession: (log: Omit<SessionLog, 'id' | 'performanceScore' | 'volumeAdjustment'>) => Promise<{ score: number; decision: string; reason: string }>;
   addVacation: (vacation: Omit<VacationPeriod, 'id'>) => Promise<void>;
   deleteVacation: (id: string) => Promise<void>;
@@ -43,6 +57,7 @@ export const useStore = create<AppState>((set, get) => ({
   activeView: 'training',
   isOnboarding: true,
   activeTrainingSession: null,
+  showPreCheckin: null,
 
   init: async () => {
     const users = await db.users.toArray();
@@ -110,7 +125,6 @@ export const useStore = create<AppState>((set, get) => ({
     await db.exercises.put(exercise);
     set(s => ({ exercises: [...s.exercises, exercise] }));
 
-    // Auto-generate first mesocycle
     const meso = generateMesocycle(exercise, user.trainingAgeMonths, user.sessionsPerWeek);
     await db.mesocycles.put(meso);
     set(s => ({ mesocycles: [...s.mesocycles, meso] }));
@@ -136,18 +150,41 @@ export const useStore = create<AppState>((set, get) => ({
     set(s => ({ mesocycles: [...s.mesocycles, meso] }));
   },
 
-  startTrainingSession: (exerciseId) => {
+  // Step 1: Show pre-workout checkin
+  beginPreCheckin: (exerciseId) => {
+    set({ showPreCheckin: { exerciseId } });
+  },
+
+  // Step 2: After checkin, start actual session with adjusted plan
+  startTrainingSession: async (exerciseId, checkinData, adjustedPlan, usedAdjustedPlan) => {
     const meso = get().mesocycles.find(m => m.exerciseId === exerciseId && m.status === 'active');
     if (!meso) return;
 
+    // Save checkin to DB
+    const checkin: PreWorkoutCheckin = {
+      ...checkinData,
+      id: uuid(),
+      date: new Date().toISOString(),
+    };
+    await db.precheckins.put(checkin);
+
     set({
+      showPreCheckin: null,
       activeTrainingSession: {
         exerciseId,
         mesocycleId: meso.id,
         weekNumber: meso.currentWeek,
         sessionNumber: meso.currentSession,
+        preCheckinId: checkin.id,
+        usedAdjustedPlan,
+        adjustedPlan,
+        readinessScore: checkinData.readinessScore,
       },
     });
+  },
+
+  skipTraining: () => {
+    set({ showPreCheckin: null, activeTrainingSession: null });
   },
 
   logSession: async (logData) => {
@@ -162,8 +199,32 @@ export const useStore = create<AppState>((set, get) => ({
     const plan = week?.sessions.find(s => s.sessionNumber === logData.sessionNumber);
     if (!plan) return { score: 0, decision: 'hold', reason: '' };
 
+    // Use adjusted plan from active session if available
+    const activeSession = get().activeTrainingSession;
+    const effectivePlan = activeSession?.adjustedPlan ?? plan;
+    const readinessScore = activeSession?.readinessScore ?? 0;
+    const usedAdj = logData.usedAdjustedPlan ?? true;
+
+    // Calculate performance score with new formula
+    const perfScore = calculatePerformanceScore(
+      { ...logData, id: '' } as SessionLog,
+      effectivePlan,
+      readinessScore,
+      usedAdj,
+    );
+
+    // Get decision from score, check joint pain from checkin
+    let jointPain = false;
+    if (logData.preCheckinId) {
+      const checkin = await db.precheckins.get(logData.preCheckinId);
+      if (checkin) jointPain = checkin.jointPain;
+    }
+
+    const decision = getDecisionFromScore(perfScore, jointPain);
+
+    // Process autoregulation for future weeks
     const { updatedExercise, updatedMesocycle, adjustment } = processSessionResult(
-      { ...logData, id: '', performanceScore: 0 } as SessionLog,
+      { ...logData, id: '', performanceScore: perfScore } as SessionLog,
       plan,
       exercise,
       meso,
@@ -172,20 +233,18 @@ export const useStore = create<AppState>((set, get) => ({
 
     // Evaluate pullup phase transition
     if (updatedExercise.type === 'bodyweight') {
-      const allLogs = [...get().sessionLogs, { ...logData, id: '', performanceScore: 0, volumeAdjustment: adjustment } as SessionLog];
+      const allLogs = [...get().sessionLogs, { ...logData, id: '', performanceScore: perfScore, volumeAdjustment: adjustment } as SessionLog];
       const newPhase = evaluatePullupPhase(updatedExercise, allLogs);
       if (newPhase !== updatedExercise.progressionPhase) {
         updatedExercise.progressionPhase = newPhase;
       }
     }
 
-    const score = adjustment.setsChange >= 2 ? 3 : adjustment.setsChange > 0 ? 2 : adjustment.setsChange === 0 ? 1 : -1;
-
     const sessionLog: SessionLog = {
       ...logData,
       id: uuid(),
-      performanceScore: score,
-      volumeAdjustment: adjustment,
+      performanceScore: perfScore,
+      volumeAdjustment: { ...adjustment, decision: decision.decision, reason: decision.reason },
     };
 
     // Advance session/week counters
@@ -216,9 +275,7 @@ export const useStore = create<AppState>((set, get) => ({
       activeTrainingSession: null,
     }));
 
-    // If mesocycle completed, auto-generate next one
     if (finalMeso.status === 'completed') {
-      // Recalibrate landmarks
       const allLogs = get().sessionLogs.filter(l => l.exerciseId === updatedExercise.id);
       const newLandmarks = recalibrateVolumeLandmarks(updatedExercise.volumeLandmarks, allLogs);
       if (newLandmarks !== updatedExercise.volumeLandmarks) {
@@ -232,7 +289,7 @@ export const useStore = create<AppState>((set, get) => ({
       set(s => ({ mesocycles: [...s.mesocycles, nextMeso] }));
     }
 
-    return { score, decision: adjustment.decision, reason: adjustment.reason };
+    return { score: perfScore, decision: decision.decision, reason: decision.reason };
   },
 
   addVacation: async (vacation) => {

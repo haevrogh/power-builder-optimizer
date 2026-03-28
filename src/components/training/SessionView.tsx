@@ -14,7 +14,7 @@ export default function SessionView() {
   const exercises = useStore(s => s.exercises);
   const mesocycles = useStore(s => s.mesocycles);
   const sessionLogs = useStore(s => s.sessionLogs);
-  const startTrainingSession = useStore(s => s.startTrainingSession);
+  const beginPreCheckin = useStore(s => s.beginPreCheckin);
 
   const missedDays = useMemo(() => {
     if (sessionLogs.length === 0) return 0;
@@ -105,7 +105,7 @@ export default function SessionView() {
 
               {/* CTA */}
               <button
-                onClick={() => startTrainingSession(exercise.id)}
+                onClick={() => beginPreCheckin(exercise.id)}
                 className="w-full h-14 bg-[var(--color-primary)] text-white rounded-2xl text-base font-medium active:scale-[0.98] transition-transform"
               >
                 Начать тренировку
