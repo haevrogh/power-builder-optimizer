@@ -1,0 +1,62 @@
+@import "tailwindcss";
+
+@theme {
+  --color-surface: #FFFFFF;
+  --color-surface-dim: #F5F5F7;
+  --color-surface-container: #EFEFEF;
+  --color-on-surface: #1C1C1E;
+  --color-on-surface-variant: #8E8E93;
+  --color-outline: #D1D1D6;
+  --color-outline-variant: #E5E5EA;
+  --color-primary: #007AFF;
+  --color-primary-container: #E3F2FF;
+  --color-progress: #34C759;
+  --color-progress-container: #E8F9ED;
+  --color-intensity: #FF9500;
+  --color-intensity-container: #FFF3E0;
+  --color-rest: #5856D6;
+  --color-rest-container: #EEEDFA;
+  --color-danger: #FF3B30;
+  --color-danger-container: #FFEBE9;
+
+  --font-display: 'Onest', sans-serif;
+  --font-body: 'Golos Text', sans-serif;
+  --font-data: 'IBM Plex Mono', monospace;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-body);
+  color: var(--color-on-surface);
+  background: var(--color-surface);
+  overscroll-behavior: none;
+}
+
+#root {
+  max-width: 428px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+@media (min-width: 600px) {
+  #root {
+    max-width: 600px;
+  }
+}
+
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
