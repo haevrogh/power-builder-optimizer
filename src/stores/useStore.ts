@@ -5,6 +5,8 @@ import type { UserProfile, ExerciseConfig, Mesocycle, SessionLog, VacationPeriod
 import { getTrainingLevel } from '../types';
 import { generateMesocycle } from '../engine/mesocycle';
 import { processSessionResult } from '../engine/autoregulation';
+import { evaluatePullupPhase, recalibrateVolumeLandmarks } from '../engine/calibration';
+import { handleMissedSessions } from '../engine/vacation';
 import { DEFAULT_LANDMARKS, PROGRESSION_COEFFICIENTS } from '../engine/constants';
 import { getPullupPhase, adjustLandmarksForBodyweight } from '../engine/progression';
 
@@ -57,6 +59,20 @@ export const useStore = create<AppState>((set, get) => ({
       vacations,
       isOnboarding: !users[0],
     });
+
+    // Check for missed sessions
+    const activeMesos = mesocycles.filter(m => m.status === 'active');
+    for (const meso of activeMesos) {
+      const ex = exercises.find(e => e.id === meso.exerciseId);
+      const logs = sessionLogs.filter(l => l.mesocycleId === meso.id);
+      const lastLog = logs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+      if (ex && lastLog) {
+        const result = handleMissedSessions(meso, ex, lastLog.date);
+        if (result.action === 'soften' && result.adjustedMeso) {
+          await db.mesocycles.put(result.adjustedMeso);
+        }
+      }
+    }
   },
 
   setActiveView: (view) => set({ activeView: view }),
@@ -154,6 +170,15 @@ export const useStore = create<AppState>((set, get) => ({
       user.trainingAgeMonths,
     );
 
+    // Evaluate pullup phase transition
+    if (updatedExercise.type === 'bodyweight') {
+      const allLogs = [...get().sessionLogs, { ...logData, id: '', performanceScore: 0, volumeAdjustment: adjustment } as SessionLog];
+      const newPhase = evaluatePullupPhase(updatedExercise, allLogs);
+      if (newPhase !== updatedExercise.progressionPhase) {
+        updatedExercise.progressionPhase = newPhase;
+      }
+    }
+
     const score = adjustment.setsChange >= 2 ? 3 : adjustment.setsChange > 0 ? 2 : adjustment.setsChange === 0 ? 1 : -1;
 
     const sessionLog: SessionLog = {
@@ -193,6 +218,15 @@ export const useStore = create<AppState>((set, get) => ({
 
     // If mesocycle completed, auto-generate next one
     if (finalMeso.status === 'completed') {
+      // Recalibrate landmarks
+      const allLogs = get().sessionLogs.filter(l => l.exerciseId === updatedExercise.id);
+      const newLandmarks = recalibrateVolumeLandmarks(updatedExercise.volumeLandmarks, allLogs);
+      if (newLandmarks !== updatedExercise.volumeLandmarks) {
+        const recalibratedExercise = { ...updatedExercise, volumeLandmarks: newLandmarks };
+        await db.exercises.put(recalibratedExercise);
+        set(s => ({ exercises: s.exercises.map(e => e.id === recalibratedExercise.id ? recalibratedExercise : e) }));
+      }
+
       const nextMeso = generateMesocycle(updatedExercise, user.trainingAgeMonths, user.sessionsPerWeek);
       await db.mesocycles.put(nextMeso);
       set(s => ({ mesocycles: [...s.mesocycles, nextMeso] }));
