@@ -31,11 +31,6 @@ export default function SettingsScreen() {
   const [profileForm, setProfileForm] = useState(user ? { ...user } : null);
   const [showAddExercise, setShowAddExercise] = useState(false);
   const [showAddVacation, setShowAddVacation] = useState(false);
-  const [newExercise, setNewExercise] = useState({
-    name: '', type: 'bodyweight' as ExerciseType, muscleGroup: 'back_lats' as MuscleGroup,
-    repMax: 5, repMaxAssisted: 10, hasBand: true, bandAssistPercent: 30, eccentricOption: true,
-    availableWeights: [...DEFAULT_DUMBBELL_WEIGHTS],
-  });
   const [vacForm, setVacForm] = useState({ startDate: '', endDate: '', label: '', partialTraining: false });
 
   if (!user) return null;
@@ -106,6 +101,8 @@ export default function SettingsScreen() {
               <div className="font-medium text-sm">{e.name}</div>
               <div className="text-xs text-[var(--color-on-surface-variant)]">
                 {e.type === 'bodyweight' ? 'Свой вес' : 'Гантели'} · {MUSCLE_GROUPS.find(g => g.value === e.muscleGroup)?.label}
+                {e.type === 'dumbbell' && e.availableWeights ? ` · ${e.availableWeights[0]}–${e.availableWeights[e.availableWeights.length - 1]} кг` : ''}
+                {e.type === 'bodyweight' ? ` · макс ${e.repMax} повт` : ''}
               </div>
             </div>
             <button onClick={() => {
@@ -114,40 +111,10 @@ export default function SettingsScreen() {
           </div>
         ))}
         {showAddExercise ? (
-          <div className="mt-3 flex flex-col gap-2">
-            <input type="text" value={newExercise.name} onChange={e => setNewExercise(f => ({ ...f, name: e.target.value }))}
-              placeholder="Название" className="h-10 px-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-outline-variant)] text-sm outline-none" />
-            <div className="flex gap-2">
-              {(['bodyweight', 'dumbbell'] as const).map(t => (
-                <button key={t} onClick={() => setNewExercise(f => ({ ...f, type: t }))}
-                  className={`flex-1 h-10 rounded-xl text-xs font-medium ${newExercise.type === t ? 'bg-[var(--color-primary)] text-white' : 'bg-[var(--color-surface-container)]'}`}>
-                  {t === 'bodyweight' ? 'Свой вес' : 'Гантели'}
-                </button>
-              ))}
-            </div>
-            <select value={newExercise.muscleGroup} onChange={e => setNewExercise(f => ({ ...f, muscleGroup: e.target.value as MuscleGroup }))}
-              className="h-10 px-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-outline-variant)] text-sm outline-none">
-              {MUSCLE_GROUPS.map(g => <option key={g.value} value={g.value}>{g.label}</option>)}
-            </select>
-            <input type="number" value={newExercise.repMax} onChange={e => setNewExercise(f => ({ ...f, repMax: parseInt(e.target.value) || 0 }))}
-              placeholder="Макс повторений" className="h-10 px-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-outline-variant)] text-sm font-[family-name:var(--font-data)] outline-none" />
-            <div className="flex gap-2">
-              <button onClick={async () => {
-                if (!newExercise.name) return;
-                await addExercise({
-                  name: newExercise.name, type: newExercise.type, muscleGroup: newExercise.muscleGroup,
-                  repMax: newExercise.repMax,
-                  ...(newExercise.type === 'bodyweight' ? {
-                    assistOptions: newExercise.hasBand ? { hasBand: true, bandAssistPercent: newExercise.bandAssistPercent } : undefined,
-                    eccentricOption: newExercise.eccentricOption, repMaxAssisted: newExercise.repMaxAssisted,
-                  } : { availableWeights: newExercise.availableWeights }),
-                });
-                setShowAddExercise(false);
-                setNewExercise(f => ({ ...f, name: '' }));
-              }} className="flex-1 h-10 bg-[var(--color-primary)] text-white rounded-xl text-sm font-medium">Добавить</button>
-              <button onClick={() => setShowAddExercise(false)} className="h-10 px-4 rounded-xl text-sm text-[var(--color-on-surface-variant)]">Отмена</button>
-            </div>
-          </div>
+          <AddExerciseForm
+            onAdd={addExercise}
+            onCancel={() => setShowAddExercise(false)}
+          />
         ) : (
           <button onClick={() => setShowAddExercise(true)} className="mt-2 h-10 w-full border border-dashed border-[var(--color-outline)] rounded-xl text-sm text-[var(--color-primary)]">
             + Добавить упражнение
@@ -166,13 +133,16 @@ export default function SettingsScreen() {
         ))}
         {showAddVacation ? (
           <div className="mt-2 flex flex-col gap-2">
-            <input type="text" value={vacForm.label} onChange={e => setVacForm(f => ({ ...f, label: e.target.value }))} placeholder="Название (опционально)"
+            <Label text="Название (опционально)" />
+            <input type="text" value={vacForm.label} onChange={e => setVacForm(f => ({ ...f, label: e.target.value }))} placeholder="Отпуск, Командировка..."
               className="h-10 px-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-outline-variant)] text-sm outline-none" />
+            <Label text="Начало" />
             <input type="date" value={vacForm.startDate} onChange={e => setVacForm(f => ({ ...f, startDate: e.target.value }))}
               className="h-10 px-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-outline-variant)] text-sm outline-none" />
+            <Label text="Конец" />
             <input type="date" value={vacForm.endDate} onChange={e => setVacForm(f => ({ ...f, endDate: e.target.value }))}
               className="h-10 px-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-outline-variant)] text-sm outline-none" />
-            <div className="flex gap-2">
+            <div className="flex gap-2 mt-1">
               <button onClick={async () => {
                 if (vacForm.startDate && vacForm.endDate) {
                   await addVacation(vacForm);
@@ -214,6 +184,220 @@ export default function SettingsScreen() {
         Экспортировать данные (JSON)
       </button>
     </div>
+  );
+}
+
+// ─── Add Exercise Form (full, with 10RM approach) ───
+
+function AddExerciseForm({ onAdd, onCancel }: {
+  onAdd: (config: any) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [step, setStep] = useState<'basics' | 'test'>('basics');
+  const [form, setForm] = useState({
+    name: '',
+    type: 'bodyweight' as ExerciseType,
+    muscleGroup: 'back_lats' as MuscleGroup,
+    // Bodyweight fields
+    hasBand: true,
+    bandAssistPercent: 30,
+    eccentricOption: true,
+    repMaxBW: 3,
+    repMaxBand: 10,
+    // Dumbbell fields
+    tenRmWeight: 20,
+    availableWeights: [...DEFAULT_DUMBBELL_WEIGHTS],
+  });
+
+  const handleSubmit = async () => {
+    if (!form.name.trim()) return;
+
+    if (form.type === 'bodyweight') {
+      await onAdd({
+        name: form.name,
+        type: 'bodyweight',
+        muscleGroup: form.muscleGroup,
+        repMax: form.repMaxBW,
+        repMaxAssisted: form.hasBand ? form.repMaxBand : undefined,
+        assistOptions: form.hasBand ? { hasBand: true, bandAssistPercent: form.bandAssistPercent } : undefined,
+        eccentricOption: form.eccentricOption,
+      });
+    } else {
+      // Find the closest available weight to the 10RM weight
+      const closest = form.availableWeights.length > 0
+        ? form.availableWeights.reduce((prev, curr) =>
+            Math.abs(curr - form.tenRmWeight) < Math.abs(prev - form.tenRmWeight) ? curr : prev)
+        : form.tenRmWeight;
+      await onAdd({
+        name: form.name,
+        type: 'dumbbell',
+        muscleGroup: form.muscleGroup,
+        repMax: 10, // 10RM by definition
+        currentWeight: closest,
+        availableWeights: form.availableWeights,
+      });
+    }
+    onCancel();
+  };
+
+  // === STEP 2: 10RM Test ===
+  if (step === 'test') {
+    return (
+      <div className="mt-3 flex flex-col gap-4 animate-fade-in">
+        <div className="bg-[var(--color-primary-container)] rounded-xl p-3">
+          <p className="text-xs font-medium text-[var(--color-primary)] mb-1">Тест для определения нагрузки</p>
+          {form.type === 'dumbbell' ? (
+            <p className="text-xs text-[var(--color-on-surface)]">
+              Возьми гантель и найди вес, который можешь поднять <strong>ровно 10 раз</strong> с хорошей техникой. Последние 2 повтора должны быть тяжёлыми, но без отказа (RPE 8).
+            </p>
+          ) : (
+            <p className="text-xs text-[var(--color-on-surface)]">
+              Сделай максимум повторений с <strong>чистой техникой</strong>. Не нужно до отказа — остановись когда техника начинает ломаться.
+            </p>
+          )}
+        </div>
+
+        {form.type === 'bodyweight' ? (
+          <>
+            <div>
+              <Label text="Максимум повторений (свой вес)" />
+              <Hint text="Сколько раз можешь выполнить без помощи?" />
+              <NumInput value={form.repMaxBW} onChange={v => setForm(f => ({ ...f, repMaxBW: v }))} />
+            </div>
+
+            <div className="flex items-center gap-3">
+              <input type="checkbox" checked={form.hasBand} onChange={e => setForm(f => ({ ...f, hasBand: e.target.checked }))}
+                className="w-5 h-5 rounded accent-[var(--color-primary)]" />
+              <span className="text-sm">Есть резина (эспандер-ассистент)</span>
+            </div>
+
+            {form.hasBand && (
+              <>
+                <div>
+                  <Label text="Максимум повторений (с резиной)" />
+                  <Hint text="Сколько раз с помощью резины?" />
+                  <NumInput value={form.repMaxBand} onChange={v => setForm(f => ({ ...f, repMaxBand: v }))} />
+                </div>
+                <div>
+                  <Label text="Помощь резины (% от веса тела)" />
+                  <Hint text="Примерно: тонкая ~15%, средняя ~25%, толстая ~35%" />
+                  <NumInput value={form.bandAssistPercent} onChange={v => setForm(f => ({ ...f, bandAssistPercent: v }))} />
+                </div>
+              </>
+            )}
+
+            <div className="flex items-center gap-3">
+              <input type="checkbox" checked={form.eccentricOption} onChange={e => setForm(f => ({ ...f, eccentricOption: e.target.checked }))}
+                className="w-5 h-5 rounded accent-[var(--color-primary)]" />
+              <span className="text-sm">Могу делать медленный спуск (эксцентрика)</span>
+            </div>
+          </>
+        ) : (
+          <>
+            <div>
+              <Label text="Вес 10RM (кг)" />
+              <Hint text="Какой вес поднимешь ровно 10 раз?" />
+              <NumInput value={form.tenRmWeight} onChange={v => setForm(f => ({ ...f, tenRmWeight: v }))} />
+            </div>
+
+            <div>
+              <Label text="Доступные веса гантелей (кг)" />
+              <Hint text="Отметь все веса, которые есть в зале" />
+              <div className="flex flex-wrap gap-1.5 mt-1">
+                {DEFAULT_DUMBBELL_WEIGHTS.map(w => (
+                  <button key={w} onClick={() => setForm(f => ({
+                    ...f,
+                    availableWeights: f.availableWeights.includes(w)
+                      ? f.availableWeights.filter(x => x !== w)
+                      : [...f.availableWeights, w].sort((a, b) => a - b),
+                  }))}
+                    className={`w-10 h-10 rounded-lg text-xs font-medium font-[family-name:var(--font-data)] ${
+                      form.availableWeights.includes(w)
+                        ? 'bg-[var(--color-primary)] text-white'
+                        : 'bg-[var(--color-surface-container)] text-[var(--color-on-surface)]'
+                    }`}>
+                    {w}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+
+        <div className="flex gap-2 mt-1">
+          <button onClick={() => setStep('basics')} className="h-10 px-4 rounded-xl text-sm text-[var(--color-on-surface-variant)]">← Назад</button>
+          <button onClick={handleSubmit} className="flex-1 h-12 bg-[var(--color-primary)] text-white rounded-xl text-sm font-medium">
+            Добавить упражнение
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // === STEP 1: Basics ===
+  return (
+    <div className="mt-3 flex flex-col gap-3 animate-fade-in">
+      <div>
+        <Label text="Название упражнения" />
+        <input type="text" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+          placeholder="Подтягивания, Жим гантелей..."
+          className="w-full h-10 px-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-outline-variant)] text-sm outline-none focus:border-[var(--color-primary)]" />
+      </div>
+
+      <div>
+        <Label text="Тип нагрузки" />
+        <div className="flex gap-2">
+          {([['bodyweight', 'Свой вес'], ['dumbbell', 'Гантели']] as const).map(([val, label]) => (
+            <button key={val} onClick={() => setForm(f => ({ ...f, type: val }))}
+              className={`flex-1 h-10 rounded-xl text-sm font-medium transition-colors ${
+                form.type === val ? 'bg-[var(--color-primary)] text-white' : 'bg-[var(--color-surface-container)] text-[var(--color-on-surface)]'
+              }`}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <Label text="Мышечная группа" />
+        <select value={form.muscleGroup} onChange={e => setForm(f => ({ ...f, muscleGroup: e.target.value as MuscleGroup }))}
+          className="w-full h-10 px-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-outline-variant)] text-sm outline-none">
+          {MUSCLE_GROUPS.map(g => <option key={g.value} value={g.value}>{g.label}</option>)}
+        </select>
+      </div>
+
+      <div className="flex gap-2 mt-1">
+        <button onClick={onCancel} className="h-10 px-4 rounded-xl text-sm text-[var(--color-on-surface-variant)]">Отмена</button>
+        <button onClick={() => { if (form.name.trim()) setStep('test'); }}
+          disabled={!form.name.trim()}
+          className="flex-1 h-12 bg-[var(--color-primary)] text-white rounded-xl text-sm font-medium disabled:opacity-40">
+          Далее: тест 10RM →
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Small UI helpers ───
+
+function Label({ text }: { text: string }) {
+  return <p className="text-xs font-medium text-[var(--color-on-surface-variant)] mb-1">{text}</p>;
+}
+
+function Hint({ text }: { text: string }) {
+  return <p className="text-[11px] text-[var(--color-on-surface-variant)] mb-1">{text}</p>;
+}
+
+function NumInput({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  const [draft, setDraft] = useState(String(value));
+  const [focused, setFocused] = useState(false);
+  return (
+    <input type="number" inputMode="numeric"
+      value={focused ? draft : String(value)}
+      onFocus={() => { setFocused(true); setDraft(String(value)); }}
+      onChange={e => setDraft(e.target.value)}
+      onBlur={() => { setFocused(false); onChange(Math.max(0, parseInt(draft) || 0)); }}
+      className="w-full h-10 px-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-outline-variant)] text-sm font-[family-name:var(--font-data)] outline-none focus:border-[var(--color-primary)]" />
   );
 }
 

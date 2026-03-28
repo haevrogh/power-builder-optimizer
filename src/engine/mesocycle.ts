@@ -26,7 +26,7 @@ function weekTypeToZone(wt: WeekType): 'light' | 'medium' | 'heavy' | 'peak' {
 function buildLoadConfig(exercise: ExerciseConfig, sessionType: 'heavy' | 'light', _targetReps: number): LoadConfig {
   if (exercise.type === 'dumbbell') {
     const w = exercise.availableWeights ?? [];
-    const currentWeight = w.length > 0 ? w[Math.floor(w.length / 2)] : 20;
+    const currentWeight = exercise.currentWeight ?? (w.length > 0 ? w[Math.floor(w.length / 2)] : 20);
     return { weight: currentWeight, repRange: [6, 10] as [number, number] };
   }
   // bodyweight

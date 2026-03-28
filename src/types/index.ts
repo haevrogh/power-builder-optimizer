@@ -33,6 +33,7 @@ export interface ExerciseConfig {
   assistOptions?: { hasBand: boolean; bandAssistPercent: number };
   eccentricOption?: boolean;
   availableWeights?: number[];
+  currentWeight?: number;
   volumeLandmarks: VolumeLandmarks;
   repMax: number;
   repMaxAssisted?: number;
