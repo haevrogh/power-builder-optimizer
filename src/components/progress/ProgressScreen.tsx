@@ -241,7 +241,7 @@ export default function ProgressScreen() {
                     {log.volumeAdjustment && (
                       <span className={`text-xs font-medium px-2 py-1 rounded-lg ${
                         log.volumeAdjustment.decision === 'progress' ? 'bg-[var(--color-progress-container)] text-[var(--color-progress)]' :
-                        log.volumeAdjustment.decision === 'deload' || log.volumeAdjustment.decision === 'stop' ? 'bg-[var(--color-danger-container)] text-[var(--color-danger)]' :
+                        log.volumeAdjustment.decision === 'deload' || log.volumeAdjustment.decision === 'stop' || log.volumeAdjustment.decision === 'unload' ? 'bg-[var(--color-danger-container)] text-[var(--color-danger)]' :
                         log.volumeAdjustment.decision === 'reduce' ? 'bg-[var(--color-intensity-container)] text-[var(--color-intensity)]' :
                         'bg-[var(--color-primary-container)] text-[var(--color-primary)]'
                       }`}>

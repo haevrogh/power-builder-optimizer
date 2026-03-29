@@ -3,7 +3,7 @@ import { useStore } from '../../stores/useStore';
 import type { SetLog, ExerciseSessionEntry } from '../../types';
 import { formatLoadConfig, formatTime, formatDecision } from '../../utils/format';
 import { REST_TIMES } from '../../engine/constants';
-import { calculatePerformanceScore, getDecisionFromScore } from '../../engine/scoring';
+import { calculatePerformanceScore, getDecisionFromScore, countConsecutiveHolds } from '../../engine/scoring';
 import ProgressRing from '../common/ProgressRing';
 import WeightSelector from '../common/WeightSelector';
 
@@ -12,6 +12,7 @@ export default function ProgramSession() {
   const exercises = useStore(s => s.exercises);
   const mesocycles = useStore(s => s.mesocycles);
   const programs = useStore(s => s.programs);
+  const sessionLogs = useStore(s => s.sessionLogs);
   const logProgramSession = useStore(s => s.logProgramSession);
 
   const [currentExerciseIdx, setCurrentExerciseIdx] = useState(0);
@@ -88,7 +89,8 @@ export default function ProgramSession() {
     const score = calculatePerformanceScore(
       mockLog as any, plan, activeSession.readinessScore ?? 0, activeSession.usedAdjustedPlan ?? true
     );
-    const decision = getDecisionFromScore(score, false);
+    const consecutiveHolds = countConsecutiveHolds(sessionLogs, currentExId);
+    const decision = getDecisionFromScore(score, false, consecutiveHolds);
 
     const entry: ExerciseSessionEntry = {
       exerciseId: currentExId,
@@ -205,7 +207,7 @@ export default function ProgramSession() {
                   </span>
                   <span className={`text-[11px] font-medium px-2 py-0.5 rounded-lg ${
                     entry.decision === 'progress' ? 'bg-[var(--color-progress-container)] text-[var(--color-progress)]' :
-                    entry.decision === 'deload' || entry.decision === 'stop' ? 'bg-[var(--color-danger-container)] text-[var(--color-danger)]' :
+                    entry.decision === 'deload' || entry.decision === 'stop' || entry.decision === 'unload' ? 'bg-[var(--color-danger-container)] text-[var(--color-danger)]' :
                     entry.decision === 'reduce' ? 'bg-[var(--color-intensity-container)] text-[var(--color-intensity)]' :
                     'bg-[var(--color-primary-container)] text-[var(--color-primary)]'
                   }`}>{formatDecision(entry.decision)}</span>

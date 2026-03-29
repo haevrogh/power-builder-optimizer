@@ -1,12 +1,16 @@
 import type { SessionLog, SessionPlan, ExerciseConfig, Mesocycle, VolumeAdjustment } from '../types';
 import { getTrainingLevel } from '../types';
 import { getDecisionFromScore } from './scoring';
-import { MAX_PROGRESSION } from './constants';
+import { MAX_PROGRESSION, AUTOREGULATION } from './constants';
 
 /**
  * Process session result and update exercise/mesocycle.
  * Score is now pre-calculated and passed in via log.performanceScore.
  * Joint pain is handled via pre-checkin, not in session log.
+ *
+ * Changes:
+ * - Supports new UNLOAD decision (intermediate between reduce and deload)
+ * - Uses consecutiveHolds for consistency bonus
  */
 export function processSessionResult(
   log: SessionLog,
@@ -14,9 +18,10 @@ export function processSessionResult(
   exercise: ExerciseConfig,
   mesocycle: Mesocycle,
   trainingAgeMonths: number,
+  consecutiveHolds: number = 0,
 ): { updatedExercise: ExerciseConfig; updatedMesocycle: Mesocycle; adjustment: VolumeAdjustment } {
   const score = log.performanceScore ?? 0;
-  const decision = getDecisionFromScore(score, false); // jointPain handled at store level
+  const decision = getDecisionFromScore(score, false, consecutiveHolds);
   const level = getTrainingLevel(trainingAgeMonths);
   const maxCoeff = MAX_PROGRESSION[level];
 
@@ -27,9 +32,13 @@ export function processSessionResult(
     newCoeff = Math.max(0, Math.min(maxCoeff, newCoeff + decision.coefficientChange));
   }
 
-  const newRepMax = decision.decision === 'deload' || decision.decision === 'stop'
-    ? exercise.repMax
-    : Math.round((exercise.repMax * (1 + newCoeff)) * 100) / 100;
+  const shouldProgressRepMax = decision.decision !== 'deload'
+    && decision.decision !== 'unload'
+    && decision.decision !== 'stop';
+
+  const newRepMax = shouldProgressRepMax
+    ? Math.round((exercise.repMax * (1 + newCoeff)) * 100) / 100
+    : exercise.repMax;
 
   const updatedExercise: ExerciseConfig = {
     ...exercise,
@@ -41,6 +50,7 @@ export function processSessionResult(
   const updatedWeeks = mesocycle.weeks.map(week => {
     if (week.weekNumber <= mesocycle.currentWeek) return week;
 
+    // DELOAD: full deload week
     if (decision.decision === 'deload') {
       return {
         ...week,
@@ -56,6 +66,23 @@ export function processSessionResult(
       };
     }
 
+    // UNLOAD: intermediate — reduce volume 30%, keep intensity ~90-95%
+    if (decision.decision === 'unload') {
+      return {
+        ...week,
+        targetSets: Math.max(
+          exercise.volumeLandmarks.mv,
+          Math.round(week.targetSets * AUTOREGULATION.UNLOAD_VOLUME_MULTIPLIER),
+        ),
+        sessions: week.sessions.map(s => ({
+          ...s,
+          sets: Math.max(1, Math.round(s.sets * AUTOREGULATION.UNLOAD_VOLUME_MULTIPLIER)),
+          intensityPercent: Math.max(0.40, s.intensityPercent * AUTOREGULATION.UNLOAD_INTENSITY_MULTIPLIER),
+        })),
+      };
+    }
+
+    // Other decisions: apply sets/intensity changes
     return {
       ...week,
       targetSets: Math.max(

@@ -2,7 +2,14 @@ export type TrainingLevel = 'absolute_beginner' | 'beginner' | 'intermediate_ear
 export type MuscleGroup = 'back_lats' | 'chest' | 'shoulders' | 'biceps' | 'triceps' | 'quads' | 'hamstrings' | 'glutes' | 'core';
 export type WeekType = 'accumulation' | 'intensification' | 'peak' | 'deload';
 export type SessionType = 'heavy' | 'light';
-export type VolumeDecision = 'progress' | 'hold' | 'observe' | 'reduce' | 'deload' | 'stop';
+export type VolumeDecision = 'progress' | 'hold' | 'observe' | 'reduce' | 'unload' | 'deload' | 'stop';
+
+export type FailureReason = 'soreness' | 'sleep' | 'joint_pain' | 'just_hard';
+
+export interface FailureSurveyResponse {
+  reason: FailureReason;
+  sessionDate: string;
+}
 export type ExerciseType = 'bodyweight' | 'dumbbell';
 export type LoadMode = 'bodyweight' | 'band_assisted' | 'eccentric_only';
 

@@ -46,3 +46,41 @@ export const REST_TIMES: Record<string, number> = {
 };
 
 export const DEFAULT_DUMBBELL_WEIGHTS = [5, 7, 9, 11, 13, 15, 18, 20, 22, 25, 27, 29, 32, 34, 36, 38, 40];
+
+/**
+ * All autoregulation thresholds in one place.
+ * Adjust for different athlete levels without changing logic.
+ */
+export const AUTOREGULATION = {
+  // Binary scoring: completion ratio threshold
+  COMPLETION_THRESHOLD: 0.95,
+
+  // Consistency bonus: consecutive HOLD sessions before lowering PROGRESS threshold
+  CONSECUTIVE_HOLD_FOR_BONUS: 3,
+  PROGRESS_THRESHOLD_WITH_BONUS: 2,  // normally 3, with bonus → 2
+
+  // UNLOAD triggers
+  CONSECUTIVE_FAILURES_FOR_UNLOAD: 3,
+  UNLOAD_VOLUME_MULTIPLIER: 0.70,      // -30% volume
+  UNLOAD_INTENSITY_MULTIPLIER: 0.92,   // ~90-95% intensity
+
+  // Recovery workout on joint pain
+  RECOVERY_INTENSITY_PERCENT: 0.30,    // 30% of normal weight
+  RECOVERY_SETS_MULTIPLIER: 0.50,      // 50% of planned sets
+  RECOVERY_TARGET_RPE: 4,
+
+  // Progress rewards
+  PROGRESS_SETS_CHANGE: 2,
+  PROGRESS_COEFFICIENT_CHANGE: 0.0025,
+
+  // Reduce penalties
+  REDUCE_SETS_CHANGE: -1,
+  REDUCE_INTENSITY_CHANGE: -0.10,
+
+  // Observe
+  OBSERVE_INTENSITY_CHANGE: -0.05,
+  OBSERVE_COEFFICIENT_CHANGE: -0.0025,
+
+  // Failure survey trigger
+  CONSECUTIVE_FAILURES_FOR_SURVEY: 3,
+} as const;

@@ -10,7 +10,7 @@ import { generateMesocycle } from '../engine/mesocycle';
 import { processSessionResult } from '../engine/autoregulation';
 import { evaluatePullupPhase, recalibrateVolumeLandmarks } from '../engine/calibration';
 import { handleMissedSessions } from '../engine/vacation';
-import { calculatePerformanceScore, getDecisionFromScore } from '../engine/scoring';
+import { calculatePerformanceScore, getDecisionFromScore, countConsecutiveHolds } from '../engine/scoring';
 import { DEFAULT_LANDMARKS, PROGRESSION_COEFFICIENTS } from '../engine/constants';
 import { getPullupPhase, adjustLandmarksForBodyweight } from '../engine/progression';
 
@@ -400,11 +400,12 @@ export const useStore = create<AppState>((set, get) => ({
       if (checkin) jointPain = checkin.jointPain;
     }
 
-    const decision = getDecisionFromScore(perfScore, jointPain);
+    const consecutiveHolds = countConsecutiveHolds(get().sessionLogs, exercise.id);
+    const decision = getDecisionFromScore(perfScore, jointPain, consecutiveHolds);
 
     const { updatedExercise, updatedMesocycle, adjustment } = processSessionResult(
       { ...logData, id: '', performanceScore: perfScore } as SessionLog,
-      plan, exercise, meso, user.trainingAgeMonths,
+      plan, exercise, meso, user.trainingAgeMonths, consecutiveHolds,
     );
 
     if (updatedExercise.type === 'bodyweight') {

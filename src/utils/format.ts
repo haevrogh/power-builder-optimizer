@@ -32,6 +32,7 @@ export function formatDecision(decision: string): string {
     hold: 'УДЕРЖАНИЕ',
     observe: 'НАБЛЮДЕНИЕ',
     reduce: 'ОТКАТ',
+    unload: 'ОБЛЕГЧЕНИЕ',
     deload: 'ДЕLOAD',
     stop: 'СТОП',
   };

@@ -92,11 +92,11 @@ export default function PreCheckin({ plan, exerciseName, onStart, onSkip }: Prop
             </div>
           )}
 
-          {adjustment.severity === 'severe' && readiness <= -3 && !jointPain && (
+          {adjustment.severity === 'severe' && (
             <div className="w-full flex flex-col gap-3 mb-6">
               <button onClick={handleAcceptAdjustment}
                 className="w-full h-14 bg-[var(--color-primary)] text-white rounded-2xl text-base font-medium">
-                Лёгкая тренировка
+                {jointPain ? 'Восстановительная тренировка' : 'Лёгкая тренировка'}
               </button>
               <button onClick={onSkip}
                 className="w-full h-12 rounded-2xl text-base font-medium text-[var(--color-on-surface-variant)]">
@@ -119,7 +119,7 @@ export default function PreCheckin({ plan, exerciseName, onStart, onSkip }: Prop
           </div>
         )}
 
-        {jointPain && (
+        {jointPain && adjustment.severity !== 'severe' && (
           <button onClick={onSkip}
             className="w-full h-14 bg-[var(--color-danger)] text-white rounded-2xl text-base font-medium">
             Пропустить упражнение

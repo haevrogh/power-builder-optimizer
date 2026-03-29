@@ -158,7 +158,7 @@ export default function ActiveSession() {
         </div>
         <span className={`text-xs font-medium px-3 py-1.5 rounded-lg mb-4 ${
           result.decision === 'progress' ? 'bg-[var(--color-progress-container)] text-[var(--color-progress)]' :
-          result.decision === 'deload' || result.decision === 'stop' ? 'bg-[var(--color-danger-container)] text-[var(--color-danger)]' :
+          result.decision === 'deload' || result.decision === 'stop' || result.decision === 'unload' ? 'bg-[var(--color-danger-container)] text-[var(--color-danger)]' :
           result.decision === 'reduce' ? 'bg-[var(--color-intensity-container)] text-[var(--color-intensity)]' :
           'bg-[var(--color-primary-container)] text-[var(--color-primary)]'
         }`}>
